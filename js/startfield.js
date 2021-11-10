@@ -38,5 +38,48 @@ Starfield.prototype.initialise = function(div) {
 };
 
 Starfield.prototype.start = function() {
-    
+    // create the star
+    var stars = [];
+    for (var i = 0; i < this.stars; i++) {
+        stars[i] = new Star(Math.random()*this.width, Math.random()*this.height, Math.random()*3+1, (Math.random()*(this.maxVelocity - this.minVelocity))+this.minVelocity);
+    }
+    this.stars = stars;
+
+    var self = this;
+    // star the timer
+    this.intervalId = setInterval(function() {
+        self.update();
+        self.draw();
+    }, 1000 / this.fps);
+};
+
+Starfield.prototype.stop = function() {
+    clearInterval(this.intervalId);
 }
+
+Starfield.prototype.update = function() {
+    var dt = 1 / this.fps;
+
+    for (var i = 0; i < this.stars.lenght; i++) {
+        var star = this.stars[i];
+        star.y += dt * star.velocity;
+        // if the star has moved from the bottom of the screen, spawn it at the top
+        if (star.y > this.height) {
+            this.stars[i] = new Star(Math.random() * this.width, 0, Math.random()*3+1, (Math.random()*(this.maxVelocity - this.minVelocity))+this.minVelocity);
+        }
+    }
+};
+
+Starfield.prototype.draw = function() {
+    // get the drawing context
+    var ctx = this.canvas.getContext("2d");
+    // draw the background
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, this.width, this.height);
+    // draw stars
+    ctx.fillStyle = '#ffffff';
+    for (var i = 0; i < this.stars.lenght; i++) {
+        var star = this.stars[i];
+        ctx.fillRect(star.x, star.y, star.size, star.size);
+    }
+};

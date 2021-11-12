@@ -132,5 +132,72 @@ Game.prototype.mute = function(mute) {
 
 // the main loop
 function GameLoop(game) {
-    
+    var currentState = game.currentState();
+    if (currentState) {
+        // delta t is the time to update/draw
+        var dt = 1 / game.config.fps;
+
+        // update if we have an update function, also draw if we have a draw function
+        if (currentState.update) {
+            currentState.update(game, dt);
+        }
+        if (currentState.draw) {
+            currentState.draw(game, dt, ctx);
+        }
+    }
+}
+
+Game.prototype.pushState = function(state) {
+    // if there's an enter function for the new state, call it
+    if(state.enter) {
+        state.enter(game);
+    }
+    // set the current state
+    this.stateStack.push(state);
+}
+
+Game.prototype.popState = function() {
+    // leave and pop the state
+    if(this.currentState()) {
+        if(this.currentState().leave) {
+            this.currentState().leave(game);
+        }
+
+        // set the curren state
+        this.stateStack.pop();
+    }
+};
+
+// stop the game
+Game.prototype.stop = function Stop() {
+    clearInterval(this.inveralId);
+};
+
+// inform the game a key is down
+Game.prototype.keyDown = function(keyCode) {
+    this.pressedKey[keyCode] = true;
+    // delegate to the current state too
+    if (this.currentState() && this.currentState().keyDown) {
+        this.currentState().keyDown(this, keyCode)
+    }
+}
+
+Game.prototype.touchstart = function(s) {
+    if (this.currentState() && this.currentState().keyDown) {
+        this.currentState().keyDown(this, KEY_SPACE);
+    }
+};
+
+Game.prototype.touchend = function(s) {
+    delete this.pressedKey[KEY_RIGHT];
+    delete this.pressedKey[KEY_LEFT];
+}
+
+Game.prototype.touchmove = function(e) {
+    var currentX = e.changeTouches[0].pageX;
+    if(this.previousX > 0) {
+        if (currentX > this.previousX) {
+            delete this.pressedKey[KEY_LEFT];
+        }
+    }
 }

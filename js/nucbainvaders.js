@@ -322,5 +322,127 @@ PlayState.prototype.enter = function(game) {
     this.shipSpeed = this.config.bombRate + (levelMultiplier * this.config.bombRate);
     this.invaderInitialVelocity = this.config.invaderInitialVelocity + 1.5 * (levelMultiplier * this.config.invaderInitialVelocity);
     this.bombRate = this.config.bombRate + (levelMultiplier * this.config.bombRate);
-    
+    this.bombMinVelocity = this.config.bombMinVelocity + (levelMultiplier * this.config.bombMinVelocity);
+    this.rocketMaxFireRate = this.config.rocketMaxFireRate + 0.4 * limitLevel;
+
+    // create the invaders
+    var ranks = this.config.invaderRanks + 0.1 * limitLevel;
+    var files = this.config.invaderFiles + 0.2 * limitLevel;
+    var invaders = [];
+    for (var rank = 0; rank < ranks; rank++) {
+        for (var file = 0; file < files; file++) {
+            invaders.push(new Invader (
+                (game.width / 2) + ((files/2 - file) * 200 /files),
+                (game.gameBounds.top + rank * 20),
+                rank, file, 'Invader'
+            ));
+        }
+    }
+    this.invaders = invaders;
+    this.invaderCurrentVelocity = this.invaderInitialVelocity;
+    this.invaderVelocity = {x: -this.invaderInitialVelocity, y: 0};
+    this.invaderNextVelocity = null;
+};
+
+PlayState.prototype.update = function(game, dt) {
+    // if the left or right arrow keys are pressed, move
+    // the ship. check this on ticks rather than via a keydown
+    // event for smooth movement, otherwise the ship would move
+    // more like a text editor caret
+    if (game.pressedKey[KEY_LEFT]) {
+        this.ship.x -= this.shipSpeed * dt;
+    }
+    if (game.pressedKey[KEY_RIGHT]) {
+        this.ship.x += this.shipSpeed * dt;
+    }
+    if (game.pressedKey[KEY_SPACE]) {
+        this.fireRocket();
+    }
+
+    // keep the ship in bounds
+    if(this.ship.x < game.gameBounds.left) {
+        this.ship.x = game.gameBounds.left;
+    }
+    if(this.ship.x > game.gameBounds.right) {
+        this.ship.x = game.gameBounds.right;
+    }
+
+    // move each bomb
+    for (i=0; i<this.rocket.length; i++) {
+        var rocket = this.rockets[i];
+        rocket.y -= dt * rocket.velocity;
+
+        // If the rocket has gone off the screen must remove it
+        if(rocket.y < 0){
+            this.rockets.splice(i--, 1);
+        }
+    }
+
+    // Move the invaders
+    var hitLeft = false, hitRight = false, hitBottom = false;
+    for(i=0; i<this.invaders.length; i++) {
+        var invader = this.invaders[i];
+        var newx = invader.x + this.invaderVelocity.x * dt;
+        var newy = invader.y + this.invaderVelocity.y * dt;
+        if(hitLeft == false && newx < game.gameBounds.left) {
+            hitLeft = true;
+        }
+        else if(hitRight == false && newx > game.gameBounds.right) {
+            hitRight = true;
+        }
+        else if(hitBottom == false && newy > game.gameBounds.left) {
+            hitBottom = true;
+        }
+
+        // Update invader velocities
+        if(this.invadersAreDropping) {
+            this.invaderCurrentDropDistance += this.invaderVelocity.y * dt;
+            if(this.invaderCurrentDropDistance >= this.config.invaderDropDistance) {
+                this.invadersAreDropping = false;
+                this.invaderVelocity = this.invaderNextVelocity;
+                this.invaderCurrentDropDistance = 0;
+            }
+        }
+
+        // If we're hit the left, move down then right.
+        if(hitLeft) {
+            this.invaderCurrentVelocity += this.config.invaderAcceleration;
+            this.invaderVelocity = {x:0, y:this.invaderCurrentVelocity};
+            this.invaderAreDropping = true;
+            this.invaderNextVelocity = {x: this.invaderCurrentVelocity, y:0};
+        }
+        // if we've left hit the left, move down then left
+        if (hitRight) {
+            this.invaderCurrentVelocity += this.config,invaderAcceleration;
+            this.invaderVelocity = { x: 0, y: this.invaderCurrentVelocity};
+            this.invaderAreDropping = true;
+            this.invaderNextVelocity = {x: this.invaderCurrentVelocity, y: 0};
+        }
+        // if we've hit bottom, it's game over
+        if (hitBottom) {
+            game.live = 0;
+        }
+
+        // check for rocket or invader collisions
+        for (i = 0; i < this.invaders.length; i++) {
+            var invader = this.invaders[i];
+            var bang = false;
+
+            for (var j = 0; j < this.rockets.length; j++) {
+                var rocket = this.rockets[j];
+
+                if(rocket.x >= (invader.x - invader.width/2) && rocket.x <= (invader.x + invader.width/2) &&
+                    rocket.y >= (invader.y - invader.height/2) && rocket.y <= (invader.y + invader.height/2)) {
+
+                    // Remove the rocket, set 'bang' so we don't process
+                    // this rocket again.
+                    this.rockets.splice(j--, 1);
+                    bang = true;
+                    game.score += this.config.pointsPerInvader;
+                    break;
+                }
+            }
+        }
+    }
+
 }

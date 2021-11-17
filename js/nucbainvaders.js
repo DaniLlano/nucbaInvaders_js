@@ -442,7 +442,340 @@ PlayState.prototype.update = function(game, dt) {
                     break;
                 }
             }
+            if (bang) {
+                this.invaders.splice(i++, 1);
+                game.sounds.playSound('bang');
+            }
         }
+
+        // find all of the front ranks invaders
+        var frontRankInvaders = {};
+        for (var i = 0; i < this.invaders.length; i++) {
+            // if we have no invader for the game file, or the  invader
+            // for the game file is futher behind, set the front
+            // rank invader to game one
+            if (!frontRankInvaders[Invader.file] || frontRankInvaders[invader.file].rank < invader.rank) {
+                frontRankInvaders[invader.file] = invader;
+            }
+        }
+
+        // give each front rank invader a change to drop a bomb
+        for (var i = 0; i < this.config.invaderFiles; i++) {
+            var invader = frontRankInvaders[i];
+            if (!invader) continue;
+            var change = this.bombRate * dt;
+            if (chance > Math.random()) {
+                // fire
+                this.bombs.push(new this.bombMinVelocity(invader.x, invader.y + invader.height / 2,
+                    this.bombMinVelocity + Math.random() * (this.bombMaxVelocity - this.bombMinVelocity)));
+            }
+        }
+
+        // chech for bomb or ship collisions
+        for (var i = 0; i < this.bombs.length; i++) {
+            var bomb = this.bombs[i];
+            if (bomb.x >= (this.ship.x - this.ship.width / 2) && bomb.x <= (this.ship.x + this.ship.width / 2) &&
+            bomb.y >= (this.ship.y - this.ship.height / 2) && bomb.y <= (this.ship.y + this.ship.height / 2)) {
+                this.bombs.splice(i--, 1);
+                game.lives--;
+                game.sounds.playSound('explosion');
+            }
+        }
+
+        // check for invaders and bombs collision again
+        for (var i = 0; i < this.invaders.length; i++) {
+            var invader = this.invaders[i];
+            if ((invader.x + invader.width / 2) > (this.ship.x - this.ship.width / 2) &&
+            (invader.x - invader.width / 2) < (this.ship.x + this.ship.width / 2) &&
+            (invader.y + invader.height / 2) > (this.ship.y - this.ship.height - 2) &&
+            (invader.y - invader.height / 2) < (this.ship.y + this.ship.height / 2)) {
+                //dead by collision
+                game.lives = 0;
+                game.sounds.playSound('explosion');
+            }
+        }
+
+        // check for failure
+        if (game.lives <= 0) {
+            game.moveToState(new GameOverState());
+        }
+
+        // check for victory
+        if (this.invader.length === 0) {
+            game.score += this.level * 50;
+            game.level += 1;
+            game.moveToState(new LevelIntroState(game.level));
+        }
+    };
+
+PlayState.prototype.draw = function(game, dt, ctx) {
+        
+    // clear the background
+    ctx.clearReact(0, 0, game.width, game.height);
+
+    // draw the ship
+    ctx.fillStyle = '#999999';
+    ctx.fillRect(this.ship.x - (this.ship.width / 2), this.ship.y - (this.ship.height / 2), this.ship.width, this.ship.height);
+
+    // draw invader
+    ctx.fillStyle = '#006600';
+    for (var i = 0; i < this.invaders.length; i++) {
+        var invader = this.invaders[i];
+        ctx.fillRect(invader.x - invader.width / 2, invader.y - invader.height / 2, invader.width, invader.height);
     }
 
+    // draw bombs
+    ctx.fillStyle = '#ff0000';
+    for (var i = 0; i < this.rockets.length; i++) {
+        var rocket = this.rockets[i];
+        ctx.fillRect(rocket.x, rocket.y - 2, 1, 4);
+    }
+
+    //  Draw info.
+    var textYpos =
+    game.gameBounds.bottom +
+    (game.height - game.gameBounds.bottom) / 2 + 14 / 2;
+    ctx.font = "14px Arial";
+    ctx.fillStyle = "#ffffff";
+    var info = "Lives: " + game.lives;
+    ctx.textAlign = "left";
+    ctx.fillText(info, game.gameBounds.left, textYpos);
+    info = "Score: " + game.score + ", Level: " + game.level;
+    ctx.textAlign = "right";
+    ctx.fillText(info, game.gameBounds.right, textYpos);
+
+    //  If we're in debug mode, draw bounds.
+    if (this.config.debugMode) {
+        ctx.strokeStyle = "#ff0000";
+        ctx.strokeRect(0, 0, game.width, game.height);
+        ctx.strokeRect(
+        game.gameBounds.left,
+        game.gameBounds.top,
+        game.gameBounds.right - game.gameBounds.left,
+        game.gameBounds.bottom - game.gameBounds.top
+        );
+    }
+};
+
+PlayState.prototype.keyDown = function (game, keyCode) {
+if (keyCode == KEY_SPACE) {
+  //  Fire!
+  this.fireRocket();
+}
+if (keyCode == 80) {
+  //  Push the pause state.
+  game.pushState(new PauseState());
+}
+};
+
+PlayState.prototype.keyUp = function (game, keyCode) {};
+
+PlayState.prototype.fireRocket = function () {
+//  If we have no last rocket time, or the last rocket time
+//  is older than the max rocket rate, we can fire.
+if (
+  this.lastRocketTime === null ||
+  new Date().valueOf() - this.lastRocketTime > 1000 / this.rocketMaxFireRate
+) {
+  //  Add a rocket.
+  this.rockets.push(
+    new Rocket(this.ship.x, this.ship.y - 12, this.config.rocketVelocity)
+  );
+  this.lastRocketTime = new Date().valueOf();
+
+  //  Play the 'shoot' sound.
+  game.sounds.playSound("shoot");
+}
+};
+
+function PauseState() {}
+
+PauseState.prototype.keyDown = function (game, keyCode) {
+if (keyCode == 80) {
+  //  Pop the pause state.
+  game.popState();
+}
+};
+
+PauseState.prototype.draw = function (game, dt, ctx) {
+//  Clear the background.
+ctx.clearRect(0, 0, game.width, game.height);
+
+ctx.font = "14px Arial";
+ctx.fillStyle = "#ffffff";
+ctx.textBaseline = "middle";
+ctx.textAlign = "center";
+ctx.fillText("Paused", game.width / 2, game.height / 2);
+return;
+};
+
+/*  
+  Level Intro State
+  The Level Intro state shows a 'Level X' message and
+  a countdown for the level.
+*/
+function LevelIntroState(level) {
+this.level = level;
+this.countdownMessage = "3";
+}
+
+LevelIntroState.prototype.update = function (game, dt) {
+//  Update the countdown.
+if (this.countdown === undefined) {
+  this.countdown = 3; // countdown from 3 secs
+}
+this.countdown -= dt;
+
+if (this.countdown < 2) {
+  this.countdownMessage = "2";
+}
+if (this.countdown < 1) {
+  this.countdownMessage = "1";
+}
+if (this.countdown <= 0) {
+  //  Move to the next level, popping this state.
+  game.moveToState(new PlayState(game.config, this.level));
+}
+};
+
+LevelIntroState.prototype.draw = function (game, dt, ctx) {
+//  Clear the background.
+ctx.clearRect(0, 0, game.width, game.height);
+
+ctx.font = "36px Arial";
+ctx.fillStyle = "#ffffff";
+ctx.textBaseline = "middle";
+ctx.textAlign = "center";
+ctx.fillText("Level " + this.level, game.width / 2, game.height / 2);
+ctx.font = "24px Arial";
+ctx.fillText(
+  "Ready in " + this.countdownMessage,
+  game.width / 2,
+  game.height / 2 + 36
+);
+return;
+};
+
+/*
+
+Ship
+The ship has a position and that's about it.
+*/
+function Ship(x, y) {
+this.x = x;
+this.y = y;
+this.width = 20;
+this.height = 16;
+}
+
+/*
+  Rocket
+  Fired by the ship, they've got a position, velocity and state.
+  */
+function Rocket(x, y, velocity) {
+this.x = x;
+this.y = y;
+this.velocity = velocity;
+}
+
+/*
+  Bomb
+  Dropped by invaders, they've got position, velocity.
+*/
+function Bomb(x, y, velocity) {
+this.x = x;
+this.y = y;
+this.velocity = velocity;
+}
+
+/*
+  Invader 
+  Invader's have position, type, rank/file and that's about it. 
+*/
+
+function Invader(x, y, rank, file, type) {
+this.x = x;
+this.y = y;
+this.rank = rank;
+this.file = file;
+this.type = type;
+this.width = 18;
+this.height = 14;
+}
+
+/*
+  Game State
+  A Game State is simply an update and draw proc.
+  When a game is in the state, the update and draw procs are
+  called, with a dt value (dt is delta time, i.e. the number)
+  of seconds to update or draw).
+*/
+function GameState(updateProc, drawProc, keyDown, keyUp, enter, leave) {
+this.updateProc = updateProc;
+this.drawProc = drawProc;
+this.keyDown = keyDown;
+this.keyUp = keyUp;
+this.enter = enter;
+this.leave = leave;
+}
+
+/*
+  Sounds
+  The sounds class is used to asynchronously load sounds and allow
+  them to be played.
+*/
+function Sounds() {
+//  The audio context.
+this.audioContext = null;
+
+//  The actual set of loaded sounds.
+this.sounds = {};
+}
+
+Sounds.prototype.init = function () {
+//  Create the audio context, paying attention to webkit browsers.
+context = window.AudioContext || window.webkitAudioContext;
+this.audioContext = new context();
+this.mute = false;
+};
+
+Sounds.prototype.loadSound = function (name, url) {
+    //  reference to ourselves for closures.
+    var self = this;
+
+    //  create an entry in the sounds object.
+    this.sounds[name] = null;
+
+    //  create an asynchronous request for the sound.
+    var req = new XMLHttpRequest();
+    req.open("GET", url, true);
+    req.responseType = "arraybuffer";
+    req.onload = function () {
+        self.audioContext.decodeAudioData(req.response, function (buffer) {
+            self.sounds[name] = { buffer: buffer };
+        });
+    };
+    try {
+        req.send();
+    } catch(e) {
+        console.log("An exception occured getting sound the sound " + name +
+        " this might be " +
+        "because the page is running from the file system, not a webserver."
+        );
+        console.log(e);
+    }
+};
+
+Sounds.prototype.playSound = function (name) {
+    //  If we've not got the sound, don't bother playing it.
+    if (this.sounds[name] === undefined || this.sounds[name] === null || this.mute === true) {
+        return;
+    }
+
+    //  create a sound source, set the buffer, connect to the speakers and
+    //  play the sound.
+    var source = this.audioContext.createBufferSource();
+    source.buffer = this.sounds[name].buffer;
+    source.connect(this.audioContext.destination);
+    source.start(0);
 }
